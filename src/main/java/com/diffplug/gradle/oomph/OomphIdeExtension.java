@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.imageio.ImageIO;
@@ -64,7 +65,7 @@ public class OomphIdeExtension implements P2Declarative {
 
 	final Project project;
 	final WorkspaceRegistry workspaceRegistry;
-	final SortedSet<File> projectFiles = new TreeSet<>();
+	final SortedSet<ProjectToImport> projectsToImport = new TreeSet<>();
 	final Map<String, Supplier<byte[]>> workspaceToContent = new HashMap<>();
 	final P2Model p2 = new P2Model();
 	final Lazyable<List<SetupAction>> setupActions = Lazyable.ofList();
@@ -143,6 +144,11 @@ public class OomphIdeExtension implements P2Declarative {
 
 	/** Adds all eclipse projects from all gradle projects whose paths meet the given spec. */
 	public void addAllProjects(Spec<String> include) {
+		addAllProjects(include, BLANK_ACTION);
+	}
+
+	/** Adds all eclipse projects from all gradle projects whose paths meet the given spec. */
+	public void addAllProjects(Spec<String> include, Action<ProjectToImport> withProjectToImport) {
 		project.getRootProject().getAllprojects().forEach(p -> {
 			// this project is automatically included by logic
 			// in OomphIdePlugin
@@ -151,20 +157,35 @@ public class OomphIdeExtension implements P2Declarative {
 			}
 			// this project depends on all the others
 			if (include.isSatisfiedBy(p.getPath())) {
-				addDependency(project.evaluationDependsOn(p.getPath()));
+				addDependency(project.evaluationDependsOn(p.getPath()), withProjectToImport);
 			}
 		});
 	}
 
+	private static final Action<ProjectToImport> BLANK_ACTION = new Action<ProjectToImport>() {
+
+		@Override
+		public void execute(ProjectToImport arg0) {}
+	};
+
 	/** Adds the eclipse project from the given project path. */
 	public void addProject(String projectPath) {
-		addDependency(project.evaluationDependsOn(projectPath));
+		addProject(projectPath, BLANK_ACTION);
+	}
+
+	public void addProject(String projectPath, Action<ProjectToImport> withProjectToImport) {
+		addDependency(project.evaluationDependsOn(projectPath), withProjectToImport);
 	}
 
 	private static final String DOT_PROJECT = ".project";
 
 	/** Adds the eclipse tasks from the given project as a dependency of our IDE setup task. */
 	void addDependency(Project eclipseProject) {
+		addDependency(eclipseProject, BLANK_ACTION);
+	}
+
+	/** Adds the eclipse tasks from the given project as a dependency of our IDE setup task. */
+	void addDependency(Project eclipseProject, Action<ProjectToImport> withProjectToImport) {
 		Task ideSetup = project.getTasks().getByName(OomphIdePlugin.IDE_SETUP_WORKSPACE);
 		eclipseProject.getTasks().all(task -> {
 			if ("eclipse".equals(task.getName())) {
@@ -173,16 +194,25 @@ public class OomphIdeExtension implements P2Declarative {
 			if (task instanceof GenerateEclipseProject) {
 				File projectFile = ((GenerateEclipseProject) task).getOutputFile();
 				Preconditions.checkArgument(projectFile.getName().equals(DOT_PROJECT), "Project file must be '" + DOT_PROJECT + "', was %s", projectFile);
-				projectFiles.add(projectFile);
+				ProjectToImport instance = new ProjectToImport(projectFile);
+				withProjectToImport.execute(instance);
+				projectsToImport.add(instance);
 			}
 		});
 	}
 
 	/** Adds the given folder as an eclipse project. */
 	public void addProjectFolder(Object folderObj) {
+		addProjectFolder(folderObj, null);
+	}
+
+	/** Adds the given folder as an eclipse project. */
+	public void addProjectFolder(Object folderObj, Action<ProjectToImport> withProjectToImport) {
 		File folder = project.file(folderObj);
 		Preconditions.checkArgument(folder.isDirectory(), "Folder '%s' must be a directory containing a '" + DOT_PROJECT + "' file.");
-		projectFiles.add(new File(folder, DOT_PROJECT));
+		ProjectToImport instance = new ProjectToImport(new File(folder, DOT_PROJECT));
+		withProjectToImport.execute(instance);
+		projectsToImport.add(instance);
 	}
 
 	private File getIdeDir() {
@@ -345,7 +375,8 @@ public class OomphIdeExtension implements P2Declarative {
 		// get the user setup actions
 		List<SetupAction> list = setupActions.getResult();
 		// add the project importer
-		list.add(new ProjectImporter(projectFiles));
+		list.add(new ProjectImporter(projectsToImport.stream().map(p -> p.getProjectFile()).collect(Collectors.toList())));
+		list.add(new ShareProjectSetupAction(projectsToImport));
 		// order the actions
 		List<SetupAction> ordered = SetupAction.order(list);
 		// save the workspace as the last step
