@@ -15,15 +15,21 @@
  */
 package com.diffplug.gradle.oomph;
 
+import java.io.File;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Path;
-import org.eclipse.team.core.RepositoryProvider;
 
-import com.diffplug.common.base.Strings;
 import com.diffplug.gradle.oomph.SetupAction.Internal;
 
 public class ShareProjectSetupActionInternal extends Internal<ShareProjectSetupAction> {
@@ -35,15 +41,27 @@ public class ShareProjectSetupActionInternal extends Internal<ShareProjectSetupA
 	@Override
 	public void runWithinEclipse() throws CoreException {
 		IWorkspace workspace = ResourcesPlugin.getWorkspace();
-		// add all projects to the workspace
+		Map<IProject, File> toShare = new HashMap<>();
 		for (ProjectToImport projToImport : host.projects) {
-			if (projToImport.isShare() && !Strings.isNullOrEmpty(projToImport.getProvider())) {
+			if (projToImport.canShare()) {
 				Path path = new Path(projToImport.getProjectFile().toString());
 				IProjectDescription description = workspace.loadProjectDescription(path);
 
 				IProject project = workspace.getRoot().getProject(description.getName());
-				RepositoryProvider.map(project, projToImport.getProvider());
+				toShare.put(project, new File(project.getLocation().toFile(), projToImport.getPathToRepository()));
+				// RepositoryProvider.map(project, projToImport.getProvider());
+				// RepositoryProvider provider =
+				// RepositoryProvider.getProvider(project);
 			}
+		}
+		try {
+			Class<?> opClazz = Class.forName("org.eclipse.egit.core.op.ConnectProviderOperation");
+			Constructor<?> opConstructor = opClazz.getConstructor(Map.class);
+			Object op = opConstructor.newInstance(toShare);
+			op.getClass().getMethod("execute", IProgressMonitor.class).invoke(op, new NullProgressMonitor());
+		} catch (NoSuchMethodException | SecurityException | ClassNotFoundException | IllegalAccessException
+				| InstantiationException | IllegalArgumentException | InvocationTargetException e) {
+			throw new RuntimeException(e);
 		}
 	}
 }

@@ -27,7 +27,7 @@ public class ShareProjectSetupAction extends SetupAction {
 	ArrayList<ProjectToImport> projects;
 
 	public ShareProjectSetupAction(Collection<ProjectToImport> projectsToShare) {
-		super("com.vestmark.gradle.plugins.goomph.ShareProjectSetupActionInternal");
+		super("com.diffplug.gradle.oomph.ShareProjectSetupActionInternal");
 		this.projects = new ArrayList<>(projectsToShare);
 	}
 

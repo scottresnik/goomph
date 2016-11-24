@@ -25,6 +25,7 @@ public class ProjectToImport implements Serializable, Comparable<ProjectToImport
 	private File projectFile;
 	private boolean share;
 	private String provider;
+	private String pathToRepository;
 
 	public ProjectToImport() {}
 
@@ -56,24 +57,33 @@ public class ProjectToImport implements Serializable, Comparable<ProjectToImport
 		this.provider = provider;
 	}
 
+	public String getPathToRepository() {
+		return pathToRepository;
+	}
+
+	public void setPathToRepository(String pathToRepository) {
+		this.pathToRepository = pathToRepository;
+	}
+
+	public boolean canShare() {
+		return isShare() && !(null == getProvider() || "".equals(getProvider().trim()));
+	}
+
 	/**
 	 * @see java.lang.Comparable#compareTo(java.lang.Object)
 	 */
 	@Override
 	public int compareTo(ProjectToImport o) {
-		if( o == null ) {
+		if (o == null) {
 			return 1;
-		}
-		else {
-			if( getProjectFile() == null ) {
-				if( o.getProjectFile() == null ) {
+		} else {
+			if (getProjectFile() == null) {
+				if (o.getProjectFile() == null) {
 					return 0;
-				}
-				else {
+				} else {
 					return 1;
 				}
-			}
-			else {
+			} else {
 				return getProjectFile().compareTo(o.getProjectFile());
 			}
 		}
@@ -112,6 +122,5 @@ public class ProjectToImport implements Serializable, Comparable<ProjectToImport
 			return false;
 		return true;
 	}
-	
-	
+
 }
