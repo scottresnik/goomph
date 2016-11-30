@@ -26,8 +26,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.imageio.ImageIO;
@@ -66,7 +64,7 @@ public class OomphIdeExtension implements P2Declarative {
 	final Project project;
 	final WorkspaceRegistry workspaceRegistry;
 	final SortedSet<ProjectToImport> projectsToImport = new TreeSet<>();
-	final Map<String, Supplier<byte[]>> workspaceToContent = new HashMap<>();
+	final Map<String, Action<Map<String, String>>> workspaceProps = new HashMap<>();
 	final P2Model p2 = new P2Model();
 	final Lazyable<List<SetupAction>> setupActions = Lazyable.ofList();
 
@@ -224,8 +222,9 @@ public class OomphIdeExtension implements P2Declarative {
 	}
 
 	/** Sets the given path within the workspace directory to be a property file. */
+	@SuppressWarnings("unchecked")
 	public void workspaceProp(String file, Action<Map<String, String>> configSupplier) {
-		workspaceToContent.put(file, ConfigMisc.props(configSupplier));
+		workspaceProps.merge(file, configSupplier, (before, after) -> Actions.composite(before, after));
 	}
 
 	/** Adds an action which will be run inside our running application. */
@@ -361,10 +360,10 @@ public class OomphIdeExtension implements P2Declarative {
 		// else we've gotta set it up
 		FileMisc.cleanDir(workspaceDir);
 		// setup any config files
-		workspaceToContent.forEach((path, content) -> {
+		workspaceProps.forEach((path, content) -> {
 			File target = new File(workspaceDir, path);
 			FileMisc.mkdirs(target.getParentFile());
-			Errors.rethrow().run(() -> Files.write(content.get(), target));
+			Errors.rethrow().run(() -> Files.write(ConfigMisc.props(content).get(), target));
 		});
 		// perform internal setup
 		internalSetup(getIdeDir());
@@ -410,19 +409,22 @@ public class OomphIdeExtension implements P2Declarative {
 	/////////////////
 	/** Convenience methods for setting the style. */
 	public void style(Action<ConventionStyle> action) {
-		ConventionStyle convention = new ConventionStyle(this);
-		action.execute(convention);
+		try (ConventionStyle convention = new ConventionStyle(this)) {
+			action.execute(convention);
+		}
 	}
 
 	/** Adds the java development tools. */
 	public void jdt(Action<ConventionJdt> action) {
-		ConventionJdt convention = new ConventionJdt(this);
-		action.execute(convention);
+		try (ConventionJdt convention = new ConventionJdt(this)) {
+			action.execute(convention);
+		}
 	}
 
 	/** Adds the plugin-development environment, @see ConventionPde. */
 	public void pde(Action<ConventionPde> action) {
-		ConventionPde convention = new ConventionPde(this);
-		action.execute(convention);
+		try (ConventionPde convention = new ConventionPde(this)) {
+			action.execute(convention);
+		}
 	}
 }
