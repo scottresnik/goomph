@@ -202,7 +202,7 @@ public class OomphIdeExtension implements P2Declarative {
 
 	/** Adds the given folder as an eclipse project. */
 	public void addProjectFolder(Object folderObj) {
-		addProjectFolder(folderObj, null);
+		addProjectFolder(folderObj, BLANK_ACTION);
 	}
 
 	/** Adds the given folder as an eclipse project. */
